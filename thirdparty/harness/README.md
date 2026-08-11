@@ -3,7 +3,7 @@
 The weft plane harness. Every plane and every edge links this, and none of them links
 iceoryx2.
 
-Split out of [`weft`](https://github.com/v-sekai-multiplayer-fabric/weft) with its
+Split out of [`fabric-weft-plane`](https://github.com/v-sekai-multiplayer-fabric/fabric-weft-plane) with its
 history. weft keeps only the data plane and the NIF the BEAM loads. A plane is its own
 process, its own repository, and its own container.
 
