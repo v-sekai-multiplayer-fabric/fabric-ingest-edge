@@ -107,6 +107,55 @@ typedef enum iox2_log_level_e {
     iox2_log_level_e_FATAL = 5,
 } iox2_log_level_e;
 
+
+/* ── The WaitSet ────────────────────────────────────────────────────────────
+ *
+ * One event loop for a process that has both a bus and a socket. `iox2_node_wait` is a
+ * periodic sleep and cannot wake on a packet, so an edge that used it would still need a
+ * second loop for the network. The WaitSet takes an arbitrary file descriptor, which is
+ * what removes the second loop.
+ *
+ * Transcribed from iceoryx2-ffi/c/src/api at v0.9.3. Storage structs stay incomplete and
+ * every call passes NULL for them, exactly as above.
+ */
+struct iox2_waitset_builder_t;
+struct iox2_waitset_t;
+struct iox2_waitset_guard_t;
+struct iox2_file_descriptor_t;
+
+typedef struct iox2_waitset_builder_h_t *iox2_waitset_builder_h;
+typedef struct iox2_waitset_h_t *iox2_waitset_h;
+typedef const struct iox2_waitset_h_t *iox2_waitset_h_ref;
+typedef struct iox2_waitset_guard_h_t *iox2_waitset_guard_h;
+typedef const struct iox2_waitset_guard_h_t *iox2_waitset_guard_h_ref;
+typedef struct iox2_waitset_attachment_id_h_t *iox2_waitset_attachment_id_h;
+typedef const struct iox2_waitset_attachment_id_h_t *iox2_waitset_attachment_id_h_ref;
+typedef struct iox2_file_descriptor_h_t *iox2_file_descriptor_h;
+typedef const struct iox2_file_descriptor_h_t *iox2_file_descriptor_ptr;
+
+/* A context pointer the WaitSet hands back to the callback untouched. */
+typedef void *iox2_callback_context;
+
+/* Whether the WaitSet keeps delivering events this wakeup, or stops. */
+typedef enum iox2_callback_progression_e {
+    iox2_callback_progression_e_STOP = 0,
+    iox2_callback_progression_e_CONTINUE,
+} iox2_callback_progression_e;
+
+/* Why `iox2_waitset_wait_and_process` returned. IOX2_OK is 0, and these follow it. */
+typedef enum iox2_waitset_run_result_e {
+    iox2_waitset_run_result_e_TERMINATION_REQUEST = 1,
+    iox2_waitset_run_result_e_INTERRUPT,
+    iox2_waitset_run_result_e_STOP_REQUEST,
+    iox2_waitset_run_result_e_ALL_EVENTS_HANDLED,
+} iox2_waitset_run_result_e;
+
+/* Called once for each attachment that fired. The id says which one, and comparing it with
+ * `iox2_waitset_attachment_id_has_event_from` against a guard is how a caller tells the UDP
+ * socket from a timer. */
+typedef iox2_callback_progression_e (*iox2_waitset_run_callback)(
+    iox2_waitset_attachment_id_h, iox2_callback_context);
+
 /* Success. Every int-returning call below returns this or an error code. */
 #define IOX2_OK 0
 

@@ -48,3 +48,28 @@ int iox2_subscriber_receive(iox2_subscriber_h_ref subscriber_handle, struct iox2
 void iox2_sample_payload(iox2_sample_h_ref handle, const void **payload_ptr, size_t *number_of_elements);
 void iox2_sample_drop(iox2_sample_h sample_handle);
 void iox2_subscriber_drop(iox2_subscriber_h subscriber_handle);
+
+# The WaitSet, so a plane or an edge can wait on one thing.
+#
+# An edge waits on the bus to hand a decoded packet to a plane. If it also waits on the
+# network with something else, the process has two event loops. iox2_node_wait is a periodic
+# sleep and cannot wake on a packet, so the WaitSet is what makes one loop possible: it takes
+# an arbitrary file descriptor through iox2_file_descriptor_new, which accepts a raw fd.
+#
+# Transcribed from iceoryx2-ffi/c/src/api at v0.9.3, which is the C ABI itself rather than a
+# generated header. Every storage struct stays incomplete and every call passes NULL for it,
+# which is the contract src/iox2_decls.h describes.
+void iox2_waitset_builder_new(struct iox2_waitset_builder_t *struct_ptr, iox2_waitset_builder_h *handle_ptr);
+void iox2_waitset_builder_drop(iox2_waitset_builder_h handle);
+int iox2_waitset_builder_create(iox2_waitset_builder_h handle, enum iox2_service_type_e service_type, struct iox2_waitset_t *struct_ptr, iox2_waitset_h *handle_ptr);
+void iox2_waitset_drop(iox2_waitset_h handle);
+int iox2_waitset_attach_notification(iox2_waitset_h_ref handle, iox2_file_descriptor_ptr fd, struct iox2_waitset_guard_t *guard_struct_ptr, iox2_waitset_guard_h *guard_handle_ptr);
+int iox2_waitset_attach_deadline(iox2_waitset_h_ref handle, iox2_file_descriptor_ptr fd, uint64_t seconds, uint32_t nanoseconds, struct iox2_waitset_guard_t *guard_struct_ptr, iox2_waitset_guard_h *guard_handle_ptr);
+int iox2_waitset_attach_interval(iox2_waitset_h_ref handle, uint64_t seconds, uint32_t nanoseconds, struct iox2_waitset_guard_t *guard_struct_ptr, iox2_waitset_guard_h *guard_handle_ptr);
+int iox2_waitset_wait_and_process(iox2_waitset_h_ref handle, iox2_waitset_run_callback callback, iox2_callback_context callback_ctx, enum iox2_waitset_run_result_e *result);
+void iox2_waitset_guard_drop(iox2_waitset_guard_h handle);
+int iox2_waitset_attachment_id_has_event_from(iox2_waitset_attachment_id_h_ref handle, iox2_waitset_guard_h_ref guard);
+void iox2_waitset_attachment_id_drop(iox2_waitset_attachment_id_h handle);
+bool iox2_file_descriptor_new(int32_t value, bool is_owned, struct iox2_file_descriptor_t *struct_ptr, iox2_file_descriptor_h *handle_ptr);
+iox2_file_descriptor_ptr iox2_cast_file_descriptor_ptr(iox2_file_descriptor_h handle);
+void iox2_file_descriptor_drop(iox2_file_descriptor_h handle);

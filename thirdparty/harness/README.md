@@ -42,7 +42,7 @@ from the root build.
 
 ## Nothing links iceoryx2
 
-`iceoryx2.sigs` lists the 25 C ABI functions the harness calls. Chromium's
+`iceoryx2.sigs` lists the 40 C ABI functions the harness calls. Chromium's
 `generate_stubs.py`, vendored at `thirdparty/generate_stubs`, turns that list
 into a dlsym dispatch table. The pattern comes from `fabric-godot-core`, which uses it for
 GStreamer.
@@ -140,3 +140,18 @@ weft's `docs/essays/runtime-choice.md` holds the full reversal, and the cost of 
 2. iceoryx2 in the container image, so CI runs this proof rather than a person.
 3. The first plane behind it. `zone-server-h2o` is the candidate, because its zone tick
    has no input at all until the bus carries one.
+
+## Waiting
+
+`iox2_node_wait` is a periodic sleep. It cannot wake on a packet, so a process holding both a
+bus and a socket would need a second event loop for the network, and two event loops in one
+process is the thing an edge should not have.
+
+So the harness binds the **WaitSet**. It takes an arbitrary file descriptor through
+`iox2_file_descriptor_new`, which accepts a raw `int`, and `iox2_waitset_attach_notification`
+returns a guard that identifies which attachment fired. A UDP socket, a `timerfd` and the bus
+therefore wait in one place.
+
+The signatures are transcribed from `iceoryx2-ffi/c/src/api` at v0.9.3, which is the C ABI
+itself rather than a generated header, because iceoryx2 generates its header at build time and
+this repository must build without it.
