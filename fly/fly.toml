@@ -1,0 +1,20 @@
+# The harness proof on Fly. It runs once and exits, so it is a machine to start by hand
+# rather than a service to keep alive.
+#
+#   fly deploy --config fly/fly.toml
+app            = "fabric-harness"
+primary_region = "sea"
+
+[build]
+  dockerfile = "../Containerfile"
+
+[env]
+  WEFT_MESSAGES = "8"
+
+# No [[services]]. The harness has no networking, and neither does a plane. Only an edge
+# has that, and an edge is a different repository.
+
+[[vm]]
+  memory   = "512mb"
+  cpu_kind = "shared"
+  cpus     = 1
