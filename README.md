@@ -1,70 +1,48 @@
-# fabric-edge
+# fabric-ingest-edge
 
-Split out of [`weft`](https://github.com/v-sekai-multiplayer-fabric/weft) with its
-history. weft keeps only the data plane and the NIF the BEAM loads. An edge is its own
-process, its own repository, and its own container.
+The ingest edge. An edge is a plane with networking, and this one terminates the client
+transport and hands the decoded result to a plane over iceoryx2.
 
-`thirdparty/harness` is
-[`fabric-harness`](https://github.com/v-sekai-multiplayer-fabric/fabric-harness), pulled
-in as a subtree. It carries the iceoryx2 C ABI and the shared limits, and both edges link
-it rather than linking iceoryx2.
+Split out of `fabric-edge`, which held both edges and is now archived. An edge is its own
+process, its own repository, and its own container, so two edges are two repositories.
 
+```
+ingest/     this edge
+transport/    QUIC and WebTransport, shared with the other edge by copy
+thirdparty/harness    fabric-harness, the iceoryx2 C ABI and the shared limits
+thirdparty/picoquic   vendored, the same sources the Godot client's backend uses
+```
 
-The two edges. An edge is a plane with networking.
+## What an edge is
 
-weft's `lib/weft.ex` defines both. This repository holds the code, and that moduledoc
-holds the reason.
+It obeys every plane rule and adds exactly one capability, the network.
 
-| directory | edge | terminates | gives the result to |
-| --- | --- | --- | --- |
-| `ingest` | Ingest | player input datagrams | the game data plane |
-| `gateway` | Gateway | client control streams | the control plane |
-| `transport` | shared | QUIC and WebTransport | both of the above |
+- **It holds no authority.** `Weft.Authority` decides which controller drives an avatar, in
+  FoundationDB, because two connections may land on two machines that never talk.
+- **It runs no simulation.** It has no tick of its own.
+- **It keeps no durable state.** Nothing here survives a restart, because nothing here is the
+  truth about anything.
 
-State: `transport` holds working picoquic code. `ingest` and `gateway` hold a contract and
-no code. Neither can build until iceoryx2 are in the container image.
+So an edge is the one place with a listening socket and the one place with nothing worth
+stealing.
 
-## What an edge may do, and what it may not
+## The packet path is C++, measured
 
-An edge follows the plane contract without change. It is a separate native process. It is
-sandboxed, crash isolated, and thread per core, and the control plane reaches it over
-iceoryx.
+The transport decodes every datagram, so the language is a packet-rate decision. Measured on
+one machine, decoding a 12-byte entity update against a 15 M/s bar:
 
-The one difference is that the sandbox keeps the network.
+| | rate |
+| --- | --- |
+| C++, `memcpy` decode | **841.51 M/s**, 56 times the bar |
+| Janet, byte assembly | 5.70 M/s, 2.6 times under |
 
-- It terminates a transport and decodes the wire format.
-- It holds no authority. It decides nothing about the game.
-- It runs no simulation.
-- It keeps no durable state.
+One crossing into a scripting runtime costs 117.8 ns and the whole per-packet budget is
+66.7 ns. So policy that changes often lives in `fabric-janet-plane`, which is a plane on the
+bus and never appears in this path.
 
-So a network attacker reaches a process that can decide nothing. That is what the split
-buys, and it is the reason an edge is a separate process instead of a thread.
+## TLS
 
-## Why two edges and not one
-
-A client holds one session to each edge. That costs two handshakes and two congestion
-controllers on one link.
-
-weft accepts that cost. The datagram path and the control path run in separate processes,
-so control work cannot delay the datagrams. A login, a chat message, or an asset pull is
-reliable and low rate. Player input is unreliable and high rate. One process for both puts
-the slow work in front of the fast work.
-
-## The shared transport
-
-`transport` came from `zone-server-h2o`, where it ran in the process that holds authority.
-Everything else here is weft's own. Read `TRANSPORT.md` for what moved and what it costs.
-
-Both edges terminate the same transport, so the code is here once. The client transport is
-HTTP/3 and WebTransport, and never HTTP/1.1. Firefox speaks both.
-
-## What is not here
-
-**A browser client.** `zone-guest-gyre` was a subtree here for a while, and not one file
-from it survives. A client is not an edge. Its `slughorn.wasm` and its vendored bundle were
-the two binaries in this repository that broke the rule against committing a binary to git,
-and they left with it. `zone-guest-gyre` maintains the client, which is where a client
-belongs.
-
-**A deployment.** weft's `deploy/` holds every ship and run artifact. An edge is a
-container that weft supervises, and the unit that starts it lives there.
+OpenSSL, not mbedtls. `cmake/picoquic.cmake` records why: h2o's own CMakeLists hard-requires
+OpenSSL, so OpenSSL was always linked here, and using mbedtls would mean carrying a second
+TLS library rather than removing one. TLS 1.3 is a wire protocol, so a server on picotls's
+OpenSSL backend still interoperates with a client on mbedtls.
