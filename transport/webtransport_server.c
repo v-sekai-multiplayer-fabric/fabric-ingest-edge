@@ -147,29 +147,20 @@ static void on_wt_datagram(void *app_ctx)
  * of client datagram traffic -- see zonetick_timer_fd's own header
  * comment in webtransport_server.h for why this needs a timer separate
  * from picoquic's own protocol timer. */
-static void on_zonetick_timer_fire(h2o_socket_t *sock, const char *err)
+static void on_zonetick_timer_fire(webtransport_server_t *server)
 {
-    webtransport_server_t *server = (webtransport_server_t *)sock->data;
     uint64_t expirations;
 
-    if (err != NULL) {
-        return;
-    }
     (void)read(server->zonetick_timer_fd, &expirations, sizeof(expirations));
     zonetick_fdb_this_zone(server);
 }
 
-static void on_udp_readable(h2o_socket_t *sock, const char *err)
+static void on_udp_readable(webtransport_server_t *server)
 {
-    webtransport_server_t *server = (webtransport_server_t *)sock->data;
     uint8_t recv_buffer[ZONETICK_RECV_BUF];
     struct sockaddr_storage peer_addr;
     struct sockaddr_storage local_addr;
     socklen_t peer_len;
-
-    if (err != NULL) {
-        return;
-    }
 
     for (;;) {
         peer_len = sizeof(peer_addr);
@@ -196,14 +187,9 @@ static void on_udp_readable(h2o_socket_t *sock, const char *err)
     flush_outbound(server);
 }
 
-static void on_timer_fire(h2o_socket_t *sock, const char *err)
+static void on_timer_fire(webtransport_server_t *server)
 {
-    webtransport_server_t *server = (webtransport_server_t *)sock->data;
     uint64_t expirations;
-
-    if (err != NULL) {
-        return;
-    }
 
     /* Must read a timerfd on wake or it stays readable forever. */
     (void)read(server->timer_fd, &expirations, sizeof(expirations));
@@ -241,7 +227,7 @@ static int create_udp_socket(int port)
     return fd;
 }
 
-int webtransport_server_init(webtransport_server_t *server, h2o_loop_t *loop,
+int webtransport_server_init(webtransport_server_t *server, iox2_waitset_h waitset,
                               int port, const char *cert_file, const char *key_file,
                               fdb_thread_state_t *fdb_state, uint32_t z_id)
 {
@@ -297,13 +283,31 @@ int webtransport_server_init(webtransport_server_t *server, h2o_loop_t *loop,
         return -1;
     }
 
-    server->udp_sock = h2o_evloop_socket_create(loop, server->udp_fd, H2O_SOCKET_FLAG_DONT_READ);
-    server->udp_sock->data = server;
-    h2o_socket_read_start(server->udp_sock, on_udp_readable);
+    server->waitset = waitset;
 
-    server->timer_sock = h2o_evloop_socket_create(loop, server->timer_fd, H2O_SOCKET_FLAG_DONT_READ);
-    server->timer_sock->data = server;
-    h2o_socket_read_start(server->timer_sock, on_timer_fire);
+    /* The descriptor is not owned by iceoryx2: this file opened it and closes it below, so
+       is_owned is false and a double close cannot happen. */
+    if (!iox2_file_descriptor_new(server->udp_fd, false, NULL, &server->udp_fdh) ||
+        iox2_waitset_attach_notification(&server->waitset,
+                                         iox2_cast_file_descriptor_ptr(server->udp_fdh),
+                                         NULL, &server->udp_guard) != IOX2_OK) {
+        fprintf(stderr, "webtransport_server: could not attach the UDP socket to the waitset\n");
+        picoquic_free(server->quic);
+        close(server->udp_fd);
+        close(server->timer_fd);
+        return -1;
+    }
+
+    if (!iox2_file_descriptor_new(server->timer_fd, false, NULL, &server->timer_fdh) ||
+        iox2_waitset_attach_notification(&server->waitset,
+                                         iox2_cast_file_descriptor_ptr(server->timer_fdh),
+                                         NULL, &server->timer_guard) != IOX2_OK) {
+        fprintf(stderr, "webtransport_server: could not attach the protocol timer\n");
+        picoquic_free(server->quic);
+        close(server->udp_fd);
+        close(server->timer_fd);
+        return -1;
+    }
 
     /* ZONE_TICK_HZ driver -- unlike timer_fd above (single-shot, rearmed
      * to a different interval every fire by picoquic's own protocol
@@ -326,9 +330,17 @@ int webtransport_server_init(webtransport_server_t *server, h2o_loop_t *loop,
         its.it_interval = its.it_value;
         timerfd_settime(server->zonetick_timer_fd, 0, &its, NULL);
     }
-    server->zonetick_timer_sock = h2o_evloop_socket_create(loop, server->zonetick_timer_fd, H2O_SOCKET_FLAG_DONT_READ);
-    server->zonetick_timer_sock->data = server;
-    h2o_socket_read_start(server->zonetick_timer_sock, on_zonetick_timer_fire);
+    if (!iox2_file_descriptor_new(server->zonetick_timer_fd, false, NULL, &server->zonetick_fdh) ||
+        iox2_waitset_attach_notification(&server->waitset,
+                                         iox2_cast_file_descriptor_ptr(server->zonetick_fdh),
+                                         NULL, &server->zonetick_guard) != IOX2_OK) {
+        fprintf(stderr, "webtransport_server: could not attach the zone tick timer\n");
+        picoquic_free(server->quic);
+        close(server->udp_fd);
+        close(server->timer_fd);
+        close(server->zonetick_timer_fd);
+        return -1;
+    }
 
     fprintf(stderr, "webtransport_server: WebTransport bound on UDP %d, path %s, "
                      "zone %u (TLS %s), ZoneTick at %d Hz\n",
@@ -341,17 +353,24 @@ int webtransport_server_init(webtransport_server_t *server, h2o_loop_t *loop,
 
 void webtransport_server_close(webtransport_server_t *server)
 {
-    if (server->udp_sock != NULL) {
-        h2o_socket_read_stop(server->udp_sock);
-        h2o_socket_close(server->udp_sock);
+    /* A guard holds the attachment, so it goes before the descriptor it attached. */
+    if (server->udp_guard != NULL) {
+        iox2_waitset_guard_drop(server->udp_guard);
     }
-    if (server->timer_sock != NULL) {
-        h2o_socket_read_stop(server->timer_sock);
-        h2o_socket_close(server->timer_sock);
+    if (server->timer_guard != NULL) {
+        iox2_waitset_guard_drop(server->timer_guard);
     }
-    if (server->zonetick_timer_sock != NULL) {
-        h2o_socket_read_stop(server->zonetick_timer_sock);
-        h2o_socket_close(server->zonetick_timer_sock);
+    if (server->zonetick_guard != NULL) {
+        iox2_waitset_guard_drop(server->zonetick_guard);
+    }
+    if (server->udp_fdh != NULL) {
+        iox2_file_descriptor_drop(server->udp_fdh);
+    }
+    if (server->timer_fdh != NULL) {
+        iox2_file_descriptor_drop(server->timer_fdh);
+    }
+    if (server->zonetick_fdh != NULL) {
+        iox2_file_descriptor_drop(server->zonetick_fdh);
     }
     if (server->quic != NULL) {
         picoquic_free(server->quic);

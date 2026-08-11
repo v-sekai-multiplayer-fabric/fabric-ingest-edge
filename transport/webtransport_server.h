@@ -1,6 +1,6 @@
 #pragma once
 
-#include <h2o.h>
+#include "../thirdparty/harness/iceoryx2_generated.h"
 #include <picoquic.h>
 #include <h3zero_common.h>
 #include <stdint.h>
@@ -40,14 +40,16 @@ typedef struct {
     picoquic_quic_t *quic;
 
     int udp_fd;
-    h2o_socket_t *udp_sock;
+    iox2_file_descriptor_h udp_fdh;
+    iox2_waitset_guard_h udp_guard;
 
     /* picoquic's own protocol timer (retransmission/idle-timeout
      * housekeeping) -- its interval changes dynamically per
      * picoquic_get_next_wake_time(), NOT the zonetick cadence. See
      * zonetick_timer_fd below for that. */
     int timer_fd;
-    h2o_socket_t *timer_sock;
+    iox2_file_descriptor_h timer_fdh;
+    iox2_waitset_guard_h timer_guard;
 
     /* The independent ZONE_TICK_HZ driver -- ticks every entity in this
      * zone on a fixed period, regardless of client datagram traffic.
@@ -57,9 +59,10 @@ typedef struct {
      * from the start (timerfd's own it_interval, not rearmed by hand
      * each time). */
     int zonetick_timer_fd;
-    h2o_socket_t *zonetick_timer_sock;
+    iox2_file_descriptor_h zonetick_fdh;
+    iox2_waitset_guard_h zonetick_guard;
 
-    h2o_loop_t *loop;
+    iox2_waitset_h waitset;
     int port;
 
     fdb_thread_state_t *fdb_state;
@@ -82,7 +85,7 @@ typedef struct {
  * and wires both the UDP socket and a timerfd into `loop`. z_id is the
  * one zone this process handles (see the "fabric = multiple processes"
  * correction above). Returns 0 on success. */
-int webtransport_server_init(webtransport_server_t *server, h2o_loop_t *loop,
+int webtransport_server_init(webtransport_server_t *server, iox2_waitset_h waitset,
                               int port, const char *cert_file, const char *key_file,
                               fdb_thread_state_t *fdb_state, uint32_t z_id);
 
