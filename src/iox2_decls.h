@@ -125,13 +125,22 @@ struct iox2_file_descriptor_t;
 
 typedef struct iox2_waitset_builder_h_t *iox2_waitset_builder_h;
 typedef struct iox2_waitset_h_t *iox2_waitset_h;
-typedef const struct iox2_waitset_h_t *iox2_waitset_h_ref;
 typedef struct iox2_waitset_guard_h_t *iox2_waitset_guard_h;
-typedef const struct iox2_waitset_guard_h_t *iox2_waitset_guard_h_ref;
 typedef struct iox2_waitset_attachment_id_h_t *iox2_waitset_attachment_id_h;
-typedef const struct iox2_waitset_attachment_id_h_t *iox2_waitset_attachment_id_h_ref;
 typedef struct iox2_file_descriptor_h_t *iox2_file_descriptor_h;
-typedef const struct iox2_file_descriptor_h_t *iox2_file_descriptor_ptr;
+
+/* A `_h_ref` is a pointer TO a handle and not a const handle. `waitset.rs` says
+   `pub type iox2_waitset_h_ref = *const iox2_waitset_h`, and the C example passes
+   `&waitset`. Every `_h_ref` above this block already has that shape, and writing these
+   as const handles would have compiled and passed the wrong thing through a function
+   pointer, which is a crash with no diagnostic. */
+typedef const iox2_waitset_h *iox2_waitset_h_ref;
+typedef const iox2_waitset_guard_h *iox2_waitset_guard_h_ref;
+typedef const iox2_waitset_attachment_id_h *iox2_waitset_attachment_id_h_ref;
+
+/* A file descriptor pointer is its own type rather than a `_h_ref`, and
+   `iox2_cast_file_descriptor_ptr` produces it from a handle. */
+typedef const struct iox2_file_descriptor_ptr_t *iox2_file_descriptor_ptr;
 
 /* A context pointer the WaitSet hands back to the callback untouched. */
 typedef void *iox2_callback_context;
