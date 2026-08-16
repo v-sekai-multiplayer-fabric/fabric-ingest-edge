@@ -70,3 +70,21 @@ It terminates QUIC and WebTransport. The citation entry moved out of
 
 The browser client that arrived in the same subtree is gone. A client is not an edge, and
 `zone-guest-gyre` maintains it.
+
+## The packet path is C++, and this is why
+
+The transport decodes every datagram, so the language is a packet-rate decision. Measured on
+one machine against a bar of 15 M snapshots per second per core:
+
+| | rate |
+| --- | --- |
+| C++, `memcpy` decode | **841.51 M/s**, 56 times the bar |
+| a scripting runtime | 5.70 M/s, 2.6 times under |
+
+One crossing into a scripting runtime costs 117.8 ns and the whole per-packet budget is
+66.7 ns. Policy that changes often lives in
+[`interactor-janet`](https://github.com/v-sekai-multiplayer-fabric/interactor-janet), which is
+an interactor on the bus and never appears in this path.
+
+This measurement was in `README.md` until the forty-line rule moved it here, to the page that
+records what the transport is and what it cost.
