@@ -1,4 +1,4 @@
-# transport-ingest
+# transport-ingest-c
 
 The ingest transport layer. It terminates the client transport, decodes player input datagrams, and hands the result to the game interactor over iceoryx2.
 
