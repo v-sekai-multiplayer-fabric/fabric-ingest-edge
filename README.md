@@ -2,8 +2,6 @@
 
 The ingest transport layer. It terminates the client transport, decodes player input datagrams, and hands the result to the game interactor over iceoryx2.
 
-It vendors its dependencies as subtrees rather than submodules: picoquic for QUIC, HTTP/3 and WebTransport, mbedtls for TLS 1.3, and `contract-bus` for the iceoryx2 C ABI and the shared limits. What is under `thirdparty/` is what `ls` says is under `thirdparty/`.
-
 ## What a transport layer is
 
 It obeys every interactor rule and adds one capability, the network.
