@@ -5,3 +5,6 @@
 # inside thirdparty/. picoquic vendors its own certs/ with test material in it, and an
 # unanchored rule would make a later update of that vendored copy silently incomplete.
 /certs/
+
+# Finder leaves these on macOS.
+.DS_Store
