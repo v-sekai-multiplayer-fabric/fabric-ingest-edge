@@ -1,0 +1,14 @@
+BSD-3-Clause, following picoquic.
+
+These patches are this project's own work, and every line of them modifies a file in
+private-octopus/picoquic, which is BSD-3-Clause. A patch against BSD-3-Clause source
+produces BSD-3-Clause source, so the terms are picoquic's rather than this repository's
+root MIT, and the patches are offered under the same licence as the code they change.
+
+That is also what the README already intends. It records the buffer-key-loading API as
+following "picoquic's existing provider pattern" and both patch sets as candidates for
+upstream pull requests; a contribution offered upstream is offered under upstream's
+terms, and this file states outright what that plan assumed.
+
+The full text is picoquic's, in thirdparty/picoquic/LICENSE, beside the code these
+patches apply to. Copyright in the changes themselves is this project's.
