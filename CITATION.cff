@@ -1,0 +1,78 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "transport-ingest-c: the ingest transport layer, in C over picoquic"
+abstract: >
+  A transport layer is the input that triggers an interactor. This one terminates the
+  client transport, decodes player input datagrams, and hands the result to
+  the game interactor over iceoryx2. It carries player traffic, which is why it
+  is C and why it links one QUIC implementation and one TLS library rather than
+  whichever each end preferred: the Godot client's WebTransportPeer uses the same
+  pair, so both ends of a connection are the same code.
+authors:
+  - family-names: Lee
+    given-names: "K. S. Ernest (iFire)"
+    email: ernest.lee@chibifire.com
+    orcid: "https://orcid.org/0000-0003-4570-1436"
+version: 0.1.0-dev.1
+date-released: "2026-08-17"
+license: MIT
+repository-code: "https://github.com/v-sekai-multiplayer-fabric/transport-ingest-c"
+keywords:
+  - quic
+  - webtransport
+  - http3
+  - multiplayer
+  - iceoryx2
+
+# Vendored under thirdparty/, so these are not fetched at build time and the versions
+# are this repository's to state. transport-ingest-python is the second implementation
+# of the same contract and shares none of this list, which is the point of having it.
+references:
+
+  - type: software
+    title: "picoquic: a minimal implementation of QUIC"
+    authors:
+      - family-names: Huitema
+        given-names: Christian
+    url: "https://github.com/private-octopus/picoquic"
+    notes: >
+      The QUIC implementation, vendored at thirdparty/picoquic. HTTP/3 and WebTransport
+      come from its own picohttp -- h3zero_server.c, h3zero_common.c, webtransport.c.
+      This serves no web pages, so it links no HTTP server library.
+
+  - type: software
+    title: "picotls: a TLS 1.3 implementation"
+    url: "https://github.com/h2o/picotls"
+    notes: "Vendored at thirdparty/picotls. The TLS layer picoquic runs over."
+
+  - type: software
+    title: "Mbed TLS"
+    url: "https://github.com/Mbed-TLS/mbedtls"
+    notes: >
+      Vendored at thirdparty/mbedtls, reached through picotls. It is the backend the
+      Godot client's WebTransportPeer uses, and matching it is why it is here rather
+      than whichever backend was easiest.
+
+  - type: software
+    title: "picoquic-godot-patches"
+    notes: >
+      Vendored at thirdparty/picoquic-godot-patches. The diffs that make this picoquic
+      and the Godot client's agree; a patch set kept as a directory rather than as a
+      fork so what was changed stays legible.
+
+  - type: software
+    title: "contract-bus: the weft plane harness"
+    authors:
+      - family-names: Lee
+        given-names: "K. S. Ernest (iFire)"
+    url: "https://github.com/v-sekai-multiplayer-fabric/contract-bus"
+    notes: >
+      Vendored at thirdparty/harness. The iceoryx2 C ABI as a dlsym dispatch table, the
+      shared limits, and the payload types. Every plane and edge links it.
+
+  - type: software
+    title: "iceoryx2: zero-copy lock-free inter-process communication"
+    authors:
+      - name: "ekxide IO GmbH"
+    url: "https://github.com/eclipse-iceoryx/iceoryx2"
+    notes: "The bus the decoded result is handed to an interactor over. Reached through the harness ABI, never linked directly."
